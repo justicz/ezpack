@@ -161,8 +161,7 @@ func decodeStruct(data *bytes.Buffer, o interface{}) (err error) {
 	/*
 	 * 2. Decode Map key/value pairs and map to struct fields
 	 * Decode a string, ensure it matches the name specified in the struct tag,
-	 * and attempt to decode a value corresponding to the field type. Also ensure
-	 * there was no extra data at the end of decoding.
+	 * and attempt to decode a value corresponding to the field type.
 	 */
 
 	// Iterate over the struct's fields, and decode an appropriate type for each

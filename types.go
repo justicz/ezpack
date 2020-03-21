@@ -1,4 +1,4 @@
-package encoding
+package ezpack
 
 const (
 	PackMapID    = 0xDF

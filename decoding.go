@@ -12,18 +12,22 @@ import (
 
 var ErrBufTooShort = errors.New("buffer too short")
 
-func Decode(data []byte, o interface{}) (err error) {
+func Decode(data io.Reader, o interface{}) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("recovered panic in Decode: %s", r)
 		}
 	}()
 
-	buf := bytes.NewBuffer(data)
-	return decodeStruct(buf, o)
+	return decodeStruct(data, o)
 }
 
-func decodeCommonHeader(data *bytes.Buffer, expectedType byte) (length uint32, err error) {
+func DecodeBytes(data []byte, o interface{}) (err error) {
+	buf := bytes.NewBuffer(data)
+	return Decode(buf, o)
+}
+
+func decodeCommonHeader(data io.Reader, expectedType byte) (length uint32, err error) {
 	// Read in the 5 byte header
 	var headerBytes [5]byte
 	_, err = io.ReadFull(data, headerBytes[:])
@@ -41,7 +45,7 @@ func decodeCommonHeader(data *bytes.Buffer, expectedType byte) (length uint32, e
 	return
 }
 
-func decodeSlice(data *bytes.Buffer, maxLen uint32) ([]byte, error) {
+func decodeSlice(data io.Reader, maxLen uint32) ([]byte, error) {
 	// Decode the header
 	length, err := decodeCommonHeader(data, PackBytesID)
 	if err != nil {
@@ -67,7 +71,7 @@ func decodeSlice(data *bytes.Buffer, maxLen uint32) ([]byte, error) {
 	return out, nil
 }
 
-func decodeString(data *bytes.Buffer, maxLen uint32) (string, error) {
+func decodeString(data io.Reader, maxLen uint32) (string, error) {
 	// Decode the header
 	length, err := decodeCommonHeader(data, PackStringID)
 	if err != nil {
@@ -93,7 +97,7 @@ func decodeString(data *bytes.Buffer, maxLen uint32) (string, error) {
 	return string(s), nil
 }
 
-func decodeUint64(data *bytes.Buffer) (uint64, error) {
+func decodeUint64(data io.Reader) (uint64, error) {
 	// Read in the 9-byte encoded uint64
 	var encoded [9]byte
 	_, err := io.ReadFull(data, encoded[:])
@@ -110,7 +114,7 @@ func decodeUint64(data *bytes.Buffer) (uint64, error) {
 	return binary.BigEndian.Uint64(encoded[1:]), nil
 }
 
-func decodeStruct(data *bytes.Buffer, o interface{}) (err error) {
+func decodeStruct(data io.Reader, o interface{}) (err error) {
 	// Take the value of the interface{} object
 	v := reflect.ValueOf(o)
 

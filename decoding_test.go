@@ -29,7 +29,7 @@ func TestCanEncodeDecodeStruct(t *testing.T) {
 	require.NoError(t, err)
 
 	var res Parent
-	err = Decode(enc, &res)
+	err = DecodeBytes(enc, &res)
 	require.NoError(t, err)
 
 	require.Equal(t, res, pt)
@@ -52,11 +52,11 @@ func TestCannotDecodeBeyondMaxLen(t *testing.T) {
 	require.NoError(t, err)
 
 	var foo Foo
-	err = Decode(enc, &foo)
+	err = DecodeBytes(enc, &foo)
 	require.NoError(t, err)
 
 	var bar Bar
-	err = Decode(enc, &bar)
+	err = DecodeBytes(enc, &bar)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "max is 3")
 }

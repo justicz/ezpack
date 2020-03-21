@@ -54,8 +54,10 @@ func decodeSlice(data io.Reader, maxLen uint32) ([]byte, error) {
 
 	// Ensure the decoded length isn't too long
 	if (length > maxLen) || (length > math.MaxInt32) {
-		errs := "cannot decode slice of length %d, max is %d; "
-		errs += "did you remember to set a max length in the struct tag?"
+		errs := "cannot decode slice of length %d, max is %d"
+		if maxLen == 0 {
+			errs += " -- did you remember to set a max length in the struct tag?"
+		}
 		return nil, fmt.Errorf(errs, length, maxLen)
 	}
 
@@ -80,8 +82,10 @@ func decodeString(data io.Reader, maxLen uint32) (string, error) {
 
 	// Ensure the decoded length isn't too long
 	if (length > maxLen) || (length > math.MaxInt32) {
-		errs := "cannot decode string of length %d, max is %d; "
-		errs += "did you remember to set a max length in the struct tag?"
+		errs := "cannot decode string of length %d, max is %d"
+		if maxLen == 0 {
+			errs += " -- did you remember to set a max length in the struct tag?"
+		}
 		return "", fmt.Errorf(errs, length, maxLen)
 	}
 

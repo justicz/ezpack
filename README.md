@@ -17,4 +17,7 @@ Non-goals:
 - Efficiency in size of encoded data
 - Support for lots of types
 
+Misc notes:
+- `nil` is not supported. `nil` slices are encoded as a length 0 slice.
+
 Maybe one day this project will have real documentation :)

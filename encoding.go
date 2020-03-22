@@ -249,7 +249,6 @@ func structToPackMap(o interface{}) (*PackMap, error) {
 			case reflect.Struct:
 				// Struct: convert each one to a PackValue
 				var values []PackValue
-
 				for i := 0; i < fieldValue.Len(); i++ {
 					// Fetch the value at each index
 					valueAtIdx := fieldValue.Index(i)
@@ -265,7 +264,7 @@ func structToPackMap(o interface{}) (*PackMap, error) {
 						return nil, err
 					}
 
-					// Append it to our values slice
+					// Add to the slice of values to be encoded
 					values = append(values, vmap)
 				}
 

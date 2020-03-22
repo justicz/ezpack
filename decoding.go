@@ -102,15 +102,15 @@ func decodeString(data io.Reader, maxLength uint32) (string, error) {
 	}
 
 	// Allocate space for the bytes
-	s := make([]byte, length)
+	out := make([]byte, length)
 
 	// Read the requested number of bytes
-	_, err = io.ReadFull(data, s[:])
+	_, err = io.ReadFull(data, out)
 	if err != nil {
 		return "", ErrBufTooShort
 	}
 
-	return string(s), nil
+	return string(out), nil
 }
 
 func decodeUint64(data io.Reader) (uint64, error) {

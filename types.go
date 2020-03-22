@@ -5,6 +5,7 @@ const (
 	PackUint64ID = 0xCF
 	PackBytesID  = 0xC6
 	PackStringID = 0xDB
+	PackArrayID  = 0xDD
 )
 
 type PackValue interface {
@@ -30,4 +31,8 @@ type PackMapElement struct {
 
 type PackMap struct {
 	Elements []PackMapElement
+}
+
+type PackValueSlice struct {
+	Values []PackValue
 }

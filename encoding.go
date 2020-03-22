@@ -97,6 +97,44 @@ func (pv PackString) Encode() ([]byte, error) {
 	return buf, nil
 }
 
+func (pv PackValueSlice) Encode() ([]byte, error) {
+	// Ensure we don't overflow when allocating space, even on 32-bit systems
+	n := len(pv.Values) + 1
+	if (n <= 0) || (n > math.MaxInt32) || (len(pv.Values) > math.MaxInt32) {
+		return nil, ErrOverflow
+	}
+
+	// Allocate space for all of the encodings + the header
+	encodings := make([][]byte, 0, n)
+
+	// Allocate space for map header
+	header := make([]byte, 5)
+
+	// First byte: type identifier
+	header[0] = PackArrayID
+
+	// Next four bytes: big endian array length
+	binary.BigEndian.PutUint32(header[1:], uint32(len(pv.Values)))
+
+	// Append header to slice of all encodings
+	encodings = append(encodings, header)
+
+	// Iterate over values and append encoding of each
+	for _, elt := range pv.Values {
+		// Encode the value
+		venc, err := elt.Encode()
+		if err != nil {
+			return nil, err
+		}
+
+		// Append the value encoding
+		encodings = append(encodings, venc)
+	}
+
+	// Join the encodings together and return
+	return bytes.Join(encodings, nil), nil
+}
+
 func (pv PackMap) Encode() ([]byte, error) {
 	// Ensure we don't overflow when allocating space, even on 32-bit systems
 	n := len(pv.Elements) + 1
@@ -105,7 +143,7 @@ func (pv PackMap) Encode() ([]byte, error) {
 	}
 
 	// Allocate space for all of the encodings + the header
-	encodings := make([][]byte, n)
+	encodings := make([][]byte, 0, n)
 
 	// Allocate space for map header
 	header := make([]byte, 5)
@@ -198,16 +236,45 @@ func structToPackMap(o interface{}) (*PackMap, error) {
 		// to the types of the underlying fields
 		switch kind := structField.Type.Kind(); kind {
 		case reflect.Slice:
-			// Got a slice, ensure it's []byte or []uint8
+			// Got a slice, check if it's a slice of bytes or structs
 			elType := structField.Type.Elem()
 			elKind := elType.Kind()
-			if elKind != reflect.Uint8 {
-				return nil, fmt.Errorf("can only encode slices of byte or uint8, not %s", elKind)
-			}
 
-			// Build ezpack struct to be encoded
-			mapEl.Value = PackBytes{
-				Bytes: fieldValue.Bytes(),
+			switch elKind {
+			case reflect.Uint8:
+				// Byte slice: build ezpack struct to be encoded
+				mapEl.Value = PackBytes{
+					Bytes: fieldValue.Bytes(),
+				}
+			case reflect.Struct:
+				// Struct: convert each one to a PackValue
+				var values []PackValue
+
+				for i := 0; i < fieldValue.Len(); i++ {
+					// Fetch the value at each index
+					valueAtIdx := fieldValue.Index(i)
+
+					// Ensure we can convert each value to an interface
+					if !valueAtIdx.CanInterface() {
+						return nil, fmt.Errorf("could not convert %s[%d] to interface", structField.Name, i)
+					}
+
+					// Convert each struct to a pack map
+					vmap, err := structToPackMap(valueAtIdx.Interface())
+					if err != nil {
+						return nil, err
+					}
+
+					// Append it to our values slice
+					values = append(values, vmap)
+				}
+
+				// Build ezpack struct to be encoded
+				mapEl.Value = PackValueSlice{
+					Values: values,
+				}
+			default:
+				return nil, fmt.Errorf("can only encode slices of byte, uint8, or struct, not %s", elKind)
 			}
 		case reflect.String:
 			// Build ezpack struct to be encoded

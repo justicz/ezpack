@@ -45,20 +45,35 @@ func decodeCommonHeader(data io.Reader, expectedType byte) (length uint32, err e
 	return
 }
 
-func decodeSlice(data io.Reader, maxLen uint32) ([]byte, error) {
+func checkMaxLength(length, maxLength uint32) error {
+	// If length is greater than the user-defined maximum, fail
+	if length > maxLength {
+		errs := "cannot decode value of length %d, max is %d"
+		if maxLength == 0 {
+			errs += " -- did you remember to set a max length in the struct tag?"
+		}
+		return fmt.Errorf(errs, length, maxLength)
+	}
+
+	// If length would cause problems for 32-bit signed integers, fail
+	if length > math.MaxInt32 {
+		return fmt.Errorf("cannot decode value of length %d: overflows 32-bit signed integers", length)
+	}
+
+	return nil
+}
+
+func decodeByteSlice(data io.Reader, maxLength uint32) ([]byte, error) {
 	// Decode the header
 	length, err := decodeCommonHeader(data, PackBytesID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Ensure the decoded length isn't too long
-	if (length > maxLen) || (length > math.MaxInt32) {
-		errs := "cannot decode slice of length %d, max is %d"
-		if maxLen == 0 {
-			errs += " -- did you remember to set a max length in the struct tag?"
-		}
-		return nil, fmt.Errorf(errs, length, maxLen)
+	// Enforce maximum length
+	err = checkMaxLength(length, maxLength)
+	if err != nil {
+		return nil, err
 	}
 
 	// Allocate space for the bytes
@@ -73,20 +88,17 @@ func decodeSlice(data io.Reader, maxLen uint32) ([]byte, error) {
 	return out, nil
 }
 
-func decodeString(data io.Reader, maxLen uint32) (string, error) {
+func decodeString(data io.Reader, maxLength uint32) (string, error) {
 	// Decode the header
 	length, err := decodeCommonHeader(data, PackStringID)
 	if err != nil {
 		return "", err
 	}
 
-	// Ensure the decoded length isn't too long
-	if (length > maxLen) || (length > math.MaxInt32) {
-		errs := "cannot decode string of length %d, max is %d"
-		if maxLen == 0 {
-			errs += " -- did you remember to set a max length in the struct tag?"
-		}
-		return "", fmt.Errorf(errs, length, maxLen)
+	// Enforce maximum length
+	err = checkMaxLength(length, maxLength)
+	if err != nil {
+		return "", err
 	}
 
 	// Allocate space for the bytes
@@ -201,30 +213,80 @@ func decodeStruct(data io.Reader, o interface{}) (err error) {
 		// Decode each field type we know about
 		switch kind := structField.Type.Kind(); kind {
 		case reflect.Slice:
-			// Got a slice, ensure it's []byte or []uint8
+			// Got a slice, check if it's a slice of bytes or structs
 			elType := structField.Type.Elem()
 			elKind := elType.Kind()
-			if elKind != reflect.Uint8 {
-				return fmt.Errorf("can only decode slices of byte or uint8, not %s", elKind)
+
+			switch elKind {
+			case reflect.Uint8:
+				// Decode slice of byte or uint8
+				var dec []byte
+				dec, err = decodeByteSlice(data, parsedField.parsedStructTag.MaxLen)
+				if err != nil {
+					return fmt.Errorf("error decoding '%s': %s", expectedName, err)
+				}
+
+				// Set the value to be the decoded bytes
+				fieldValue.SetBytes(dec)
+			case reflect.Struct:
+				// Decode header
+				var length uint32
+				length, err = decodeCommonHeader(data, PackArrayID)
+				if err != nil {
+					return fmt.Errorf("error decoding '%s': %s", expectedName, err)
+				}
+
+				// Enforce maximum length
+				err = checkMaxLength(length, parsedField.parsedStructTag.MaxLen)
+				if err != nil {
+					return fmt.Errorf("error decoding '%s': %s", expectedName, err)
+				}
+
+				// Make sure it's safe to cast to int on 32-bit platforms
+				if length > math.MaxInt32 {
+					return fmt.Errorf("error decoding '%s': length %d overflows 32-bit signed integers", expectedName, length)
+				}
+
+				// This cast is OK because we just checked that length <= math.MaxInt32
+				ilen := int(length)
+
+				// Create slice of structs
+				dec := reflect.MakeSlice(structField.Type, ilen, ilen)
+				for i := 0; i < ilen; i++ {
+					// Ensure we can make a pointer to this slice entry
+					sliceEntry := dec.Index(i)
+					if !sliceEntry.CanAddr() {
+						return fmt.Errorf("Decode cannot call Addr() on %v[%d]", structField.Name, i)
+					}
+
+					// Make a pointer to this slice entry
+					entryAddr := sliceEntry.Addr()
+
+					// Ensure we can convert the pointer to this slice entry to an
+					// interface, which we need for decodeStruct
+					if !entryAddr.CanInterface() {
+						return fmt.Errorf("could not convert &%v[%d] to interface", structField.Name, i)
+					}
+
+					// Decode struct in place
+					err = decodeStruct(data, entryAddr.Interface())
+					if err != nil {
+						return fmt.Errorf("error decoding '%s': %s", expectedName, err)
+					}
+				}
+
+				// Set the value to be the decoded struct slice
+				fieldValue.Set(dec)
+			default:
+				return fmt.Errorf("can only decode slices of byte, uint8, or struct, not %s", elKind)
 			}
 
-			// Decode slice
-			var dec []byte
-			dec, err = decodeSlice(data, parsedField.parsedStructTag.MaxLen)
-			if err != nil {
-				err = fmt.Errorf("error decoding '%s': %s", expectedName, err)
-				return
-			}
-
-			// Set the value to be the decoded bytes
-			fieldValue.SetBytes(dec)
 		case reflect.String:
 			// Decode string
 			var dec string
 			dec, err = decodeString(data, parsedField.parsedStructTag.MaxLen)
 			if err != nil {
-				err = fmt.Errorf("error decoding '%s': %s", expectedName, err)
-				return
+				return fmt.Errorf("error decoding '%s': %s", expectedName, err)
 			}
 
 			// Set the value to be the decoded string
@@ -234,8 +296,7 @@ func decodeStruct(data io.Reader, o interface{}) (err error) {
 			var dec uint64
 			dec, err = decodeUint64(data)
 			if err != nil {
-				err = fmt.Errorf("error decoding '%s': %s", expectedName, err)
-				return
+				return fmt.Errorf("error decoding '%s': %s", expectedName, err)
 			}
 
 			// Set the value to be the decoded uint64
@@ -249,19 +310,16 @@ func decodeStruct(data io.Reader, o interface{}) (err error) {
 			// Make a pointer to this field
 			valueAddr := fieldValue.Addr()
 
-			// Ensure we can convert the pointer to this field to an interface
+			// Ensure we can convert the pointer to this field to an interface, which
+			// we need for decodeStruct
 			if !valueAddr.CanInterface() {
 				return fmt.Errorf("could not convert %s to interface", structField.Name)
 			}
 
-			// Convert pointer value to interface
-			valueAddrIface := valueAddr.Interface()
-
 			// Decode struct
-			err = decodeStruct(data, valueAddrIface)
+			err = decodeStruct(data, valueAddr.Interface())
 			if err != nil {
-				err = fmt.Errorf("error decoding '%s': %s", expectedName, err)
-				return
+				return fmt.Errorf("error decoding '%s': %s", expectedName, err)
 			}
 		default:
 			return fmt.Errorf("decode does not know how to decode into %s", kind)

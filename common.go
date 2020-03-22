@@ -46,9 +46,9 @@ func parseStructTag(st reflect.StructTag, goFieldName string) (ezst ezPackStruct
 	ezst.FieldName = encFieldName
 
 	// Fill in parsed max length, default to 0
-	var maxLen uint64
+	var maxLength uint64
 	if len(m[3]) != 0 {
-		maxLen, err = strconv.ParseUint(string(m[3]), 10, 32)
+		maxLength, err = strconv.ParseUint(string(m[3]), 10, 32)
 		if err != nil {
 			err = fmt.Errorf("error parsing max len for '%s': %s", ezst.FieldName, err)
 			return
@@ -56,11 +56,11 @@ func parseStructTag(st reflect.StructTag, goFieldName string) (ezst ezPackStruct
 	}
 
 	// Check max len won't cause problems for 32-bit system ints and copy in
-	if maxLen > math.MaxInt32 {
+	if maxLength > math.MaxInt32 {
 		err = fmt.Errorf("max len for '%s' too long: max is %d", ezst.FieldName, math.MaxInt32)
 		return
 	}
-	ezst.MaxLen = uint32(maxLen)
+	ezst.MaxLen = uint32(maxLength)
 
 	return
 }

@@ -35,6 +35,35 @@ func TestCanEncodeDecodeStruct(t *testing.T) {
 	require.Equal(t, res, pt)
 }
 
+func TestCanEncodeDecodeStructSlice(t *testing.T) {
+	type Child struct {
+		Foo []byte `ezpack:"foo,5"`
+		Bar string `ezpack:"bar,5"`
+		Baz uint64 `ezpack:"baz"`
+	}
+
+	type Parent struct {
+		Children []Child `ezpack:"children,3"`
+	}
+
+	pt := Parent{
+		Children: []Child{
+			Child{[]byte("hi0"), "xyz", 1234},
+			Child{[]byte("hi1"), "abc", 5678},
+			Child{[]byte("hi2"), "def", 9012},
+		},
+	}
+
+	enc, err := Encode(pt)
+	require.NoError(t, err)
+
+	var res Parent
+	err = DecodeBytes(enc, &res)
+	require.NoError(t, err)
+
+	require.Equal(t, res, pt)
+}
+
 func TestCannotDecodeBeyondMaxLen(t *testing.T) {
 	type Foo struct {
 		X string `ezpack:"bar,5"`

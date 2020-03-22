@@ -18,6 +18,6 @@ Non-goals:
 - Support for lots of types
 
 Misc notes:
-- `nil` is not supported. `nil` slices are encoded as a length 0 slice.
+- `nil` is not supported. `nil` slices are encoded as length 0 slices.
 
 Maybe one day this project will have real documentation :)

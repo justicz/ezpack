@@ -8,9 +8,11 @@ import (
 
 func TestCanEncodeDecodeStruct(t *testing.T) {
 	type Child struct {
-		Foo []byte `ezpack:"foo,5"`
-		Bar string `ezpack:"bar,5"`
-		Baz uint64 `ezpack:"baz"`
+		Foo []byte  `ezpack:"foo,5"`
+		Bar string  `ezpack:"bar,5"`
+		Baz uint64  `ezpack:"baz"`
+		Boz [0]byte `ezpack:"boz,5"`
+		Bam [5]byte `ezpack:"bam,5"`
 	}
 
 	type Parent struct {
@@ -22,6 +24,8 @@ func TestCanEncodeDecodeStruct(t *testing.T) {
 			Foo: []byte("bar"),
 			Bar: "baz",
 			Baz: (1 << 64) - 1,
+			Boz: [0]byte{},
+			Bam: [5]byte{0x77},
 		},
 	}
 
@@ -33,6 +37,27 @@ func TestCanEncodeDecodeStruct(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, res, pt)
+}
+
+func TestArrayDecodingLengthIsExact(t *testing.T) {
+	type Struct struct {
+		Bam [5]byte `ezpack:"bam,5"`
+	}
+
+	type OtherStruct struct {
+		Bam [4]byte `ezpack:"bam,5"`
+	}
+
+	os := OtherStruct{
+		Bam: [4]byte{0x77},
+	}
+
+	enc, err := Encode(os)
+	require.NoError(t, err)
+
+	var res Struct
+	err = DecodeBytes(enc, &res)
+	require.Error(t, err)
 }
 
 func TestCanEncodeDecodeStructSlice(t *testing.T) {

@@ -235,6 +235,37 @@ func structToPackMap(o interface{}) (*PackMap, error) {
 		// Build our internal representation of the values to encode according to
 		// to the types of the underlying fields
 		switch kind := structField.Type.Kind(); kind {
+		case reflect.Array:
+			// Got an array, copy it into a slice for encoding (we can't always call
+			// fieldValue.Slice() because fieldValue might not be addressable)
+			elType := structField.Type.Elem()
+			elKind := elType.Kind()
+
+			// We only support arrays of byte or uint8
+			if elKind != reflect.Uint8 {
+				return nil, fmt.Errorf("only arrays of byte or uint8 are supported")
+			}
+
+			// Save the old field value so that we can copy its values into the slice
+			oldFieldValue := fieldValue
+			oldFieldLen := oldFieldValue.Len()
+
+			// Make the new slice and copy in the values
+			sliceType := reflect.SliceOf(elType)
+			fieldValue = reflect.MakeSlice(sliceType, oldFieldLen, oldFieldLen)
+			for i := 0; i < oldFieldLen; i++ {
+				// Grab the slice entry at index i and ensure we can set the value
+				sliceEntry := fieldValue.Index(i)
+				if !sliceEntry.CanSet() {
+					return nil, fmt.Errorf("could not call Set() when encoding %s", structField.Name)
+				}
+
+				// Write the copied value
+				sliceEntry.Set(oldFieldValue.Index(i))
+			}
+
+			// Now we can just encode as we would any other slice
+			fallthrough
 		case reflect.Slice:
 			// Got a slice, check if it's a slice of bytes or structs
 			elType := structField.Type.Elem()

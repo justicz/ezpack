@@ -212,6 +212,44 @@ func decodeStruct(data io.Reader, o interface{}) (err error) {
 
 		// Decode each field type we know about
 		switch kind := structField.Type.Kind(); kind {
+		case reflect.Array:
+			// We only support arrays of byte or uint8
+			elType := structField.Type.Elem()
+			elKind := elType.Kind()
+			if elKind != reflect.Uint8 {
+				return fmt.Errorf("only arrays of byte or uint8 are supported")
+			}
+
+			// Decode slice of byte or uint8
+			var dec []byte
+			dec, err = decodeByteSlice(data, parsedField.parsedStructTag.MaxLen)
+			if err != nil {
+				return fmt.Errorf("error decoding '%s': %s", expectedName, err)
+			}
+
+			// Length should be exact for arrays
+			expectedLen := fieldValue.Len()
+			if len(dec) != expectedLen {
+				return fmt.Errorf("expected array of length %d, got %d", expectedLen, len(dec))
+			}
+
+			// Create output array
+			arrayType := reflect.ArrayOf(expectedLen, elType)
+			decArrayPtr := reflect.New(arrayType)
+			decArray := reflect.Indirect(decArrayPtr)
+			for i := 0; i < expectedLen; i++ {
+				// Ensure we can set the ith entry of the output array
+				arrayEntry := decArray.Index(i)
+				if !arrayEntry.CanSet() {
+					return fmt.Errorf("Decode cannot call Set() on %v[%d]", structField.Name, i)
+				}
+
+				// Set the entry at i to the decoded byte
+				arrayEntry.Set(reflect.ValueOf(dec[i]))
+			}
+
+			// Set the value to be the decoded byte array
+			fieldValue.Set(decArray)
 		case reflect.Slice:
 			// Got a slice, check if it's a slice of bytes or structs
 			elType := structField.Type.Elem()
@@ -226,7 +264,7 @@ func decodeStruct(data io.Reader, o interface{}) (err error) {
 					return fmt.Errorf("error decoding '%s': %s", expectedName, err)
 				}
 
-				// Set the value to be the decoded bytes
+				// Set the value to be the decoded byte slice
 				fieldValue.SetBytes(dec)
 			case reflect.Struct:
 				// Decode header

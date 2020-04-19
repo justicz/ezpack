@@ -40,14 +40,18 @@ func TestCanEncodeStringFields(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCanEncodeByteSliceFields(t *testing.T) {
+func TestCanEncodeByteSliceAndArrayFields(t *testing.T) {
 	type Struct struct {
-		Foo []byte `ezpack:"foo"`
+		Foo []byte   `ezpack:"foo"`
+		Bar [0]byte  `ezpack:"bar"`
+		Baz [10]byte `ezpack:"baz"`
 	}
 
 	// Struct containing byte slice should be encodable
 	s := Struct{
 		Foo: []byte("bar"),
+		Bar: [0]byte{},
+		Baz: [10]byte{0x77},
 	}
 
 	_, err := Encode(s)
